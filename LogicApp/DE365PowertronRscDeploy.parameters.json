@@ -1,0 +1,21 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        
+        
+        "D365FOCompanyId": {
+            "value": "DEMF"
+        },
+        "D365FODefaultPriceJournalName": {
+            "value": "VK-Preise"
+        },
+        
+        "OneDriveFolder": {
+            "value": "/Projects/00 - In progress/978 - Staples/PIM_RTL/Preise/PRICE_INPUT"
+        },
+        "PriceJournalIdPlaceholder": {
+            "value": "PRICEEVENT"
+        }
+    }
+}
