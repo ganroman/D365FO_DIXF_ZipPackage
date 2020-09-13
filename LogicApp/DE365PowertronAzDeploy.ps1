@@ -1,6 +1,5 @@
 $AzureResourceGroupName = "PDE-RGA-FO-Powertron"
-$AzureDeployTemplateFile = "de365powertronrscdeploy.json"
-$AzureDeployTemplateFileServiceAPI = "de365powertronrscdeploy_ServiceAPI.json"
+$AzureDeployTemplateFile = "basic\de365powertronrscdeploy.json"
 #$storagePrefix = "dixf"
 #$OneDriveFolder = "/Projects/00 - In progress/978 - Staples/PIM_RTL/Preise/PRICE_INPUT"
 
@@ -20,3 +19,4 @@ New-AzResourceGroupDeployment `
 #  -ResourceGroupName $AzureResourceGroupName `
 #  -TemplateFile $AzureDeployTemplateFileServiceAPI `
   
+© 2020 GitHub, Inc.
