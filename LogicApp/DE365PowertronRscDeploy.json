@@ -37,12 +37,10 @@
             "maxLength": 24
         },
         //2. Parameters of logic app
-        "LogicAppPrefix":
+        "logicAppName":
         {
             "type": "string",
-            "defaultvalue": "dixfLogicApp",
-            "minLength": 3,
-            "maxLength": 24
+            "defaultvalue": "SalesPriceImport_logic_app"
         },
 
         "DefaultFileExtension": {
@@ -66,6 +64,11 @@
         },
 
         //3. Parameters of Dynamics 365FO
+        "paramdynamicsax_instance": {
+            "type": "String",
+            "defaultValue": "yourappaos.cloudax.dynamics.com"
+        },
+
        "D365FOCompanyId": {
             "defaultValue": "DEMF",
             "type": "String"
@@ -104,18 +107,43 @@
             "type": "String"
         },
         //4.3 One Drive
-        "connections_onedriveforbusiness_externalid": {
-            "defaultValue": "",
+        "onedriveforbusiness_account": {
+            "type": "string",
+            "defaultValue": "user@tenant.com"
+        },
+        "connections_onedriveforbusiness_prefix": {
+            "defaultValue": "onedriveforbusiness",
             "type": "String"
+        },
+        "connections_onedriveforbusiness_api": {
+            "defaultValue": "onedriveforbusiness",
+            "type": "String"
+        },
+
+        "onedriveforbusiness_folder": {
+            "defaultvalue": "myfolder",
+            "type": "string"
+        },
+
+        //5. Azure function
+        "sites_DMFCreatePackage_name" : {
+            "defaultValue" : "DMFCreatePackage",
+            "type" : "string"
         }
+        
     },
     
     "variables": {
         "uniquedeploymenthash": "[uniqueString(resourceGroup().id)]",
         "uniqueStorageName": "[concat(parameters('storagePrefix'), variables('uniquedeploymenthash'))]",
-        "uniqueLogicAppName": "[concat(parameters('LogicAppPrefix'), variables('uniquedeploymenthash'))]",
         "uniqueDAXConnectionName": "[concat(parameters('connections_dynamicsax_prefix'), variables('uniquedeploymenthash'))]",
-        "uniqueAzureBlobConnectionName": "[concat(parameters('connections_azureblob_prefix'), variables('uniquedeploymenthash'))]"
+        "uniqueAzureBlobConnectionName": "[concat(parameters('connections_azureblob_prefix'), variables('uniquedeploymenthash'))]",
+        "uniqueOneDriveConnectionName": "[concat(parameters('connections_onedriveforbusiness_prefix'), variables('uniquedeploymenthash'))]",
+        "uniqueAzureFunctionName": "[concat(parameters('sites_DMFCreatePackage_name'), variables('uniquedeploymenthash'))]",
+        "uniqueServerFarmId": "[concat('ASP-', resourceGroup().name, variables('uniquedeploymenthash'))]",
+        "azureFunctionPublicAddress": "[concat('https://',variables('uniqueAzureFunctionName'),'.azurewebsites.net')]",
+        "azureAPIPublicAddress":"[concat('https://',variables('uniqueAzureFunctionName'),'.azure-api.net/',variables('uniqueAzureFunctionName'))]"
+
     },
     "resources": [
         //0. Connections
@@ -176,12 +204,255 @@
             "dependsOn": [
                 "[resourceId('Microsoft.Storage/storageAccounts',variables('uniqueStorageName'))]"
             ]
+        },
+        //4. Deploy connection to one drive for business
+        {
+            "type": "Microsoft.Web/connections",
+            "apiVersion": "2016-06-01",
+            "location": "[parameters('location')]",
+            "name": "[variables('uniqueOneDriveConnectionName')]",
+            "properties": {
+                "api": {
+                "id": "[concat(subscription().id,'/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/', parameters('connections_onedriveforbusiness_api'))]"
+                },
+                "displayName": "[parameters('onedriveforbusiness_account')]",
+                "parameterValues": {}
+            }
+        },
+        //5. Deploy Function App
+        //5.0 Server Farm
+        {
+            
+            "type": "Microsoft.Web/serverfarms",
+            "apiVersion": "2018-02-01",
+            "name": "[variables('uniqueServerFarmId')]",
+            "location": "[parameters('location')]",
+            "sku": {
+                "name": "Y1",
+                "tier": "Dynamic",
+                "size": "Y1",
+                "family": "Y",
+                "capacity": 0
+            },
+            "kind": "functionapp",
+            "properties": {
+                "perSiteScaling": false,
+                "maximumElasticWorkerCount": 1,
+                "isSpot": false,
+                "reserved": false,
+                "isXenon": false,
+                "hyperV": false,
+                "targetWorkerCount": 0,
+                "targetWorkerSizeId": 0
+            }
+             
+        },
+        //5.1 Site
+        {
+            "type": "Microsoft.Web/sites",
+            "apiVersion": "2018-11-01",
+            "name": "[variables('uniqueAzureFunctionName')]",
+            "location": "[parameters('location')]",
+            "kind": "functionapp",
+            "properties": {
+                "enabled": true,
+                "hostNameSslStates": [
+                    {
+                        "name": "[concat(variables('uniqueAzureFunctionName'), '.azurewebsites.net')]",
+                        "sslState": "Disabled",
+                        "hostType": "Standard"
+                    },
+                    {
+                        "name": "[concat(variables('uniqueAzureFunctionName'),'.scm.azurewebsites.net')]",
+                        "sslState": "Disabled",
+                        "hostType": "Repository"
+                    }
+                ],
+                "serverFarmId": "[variables('uniqueServerFarmId')]",
+                "reserved": false,
+                "isXenon": false,
+                "hyperV": false,
+                "siteConfig": {
+                    "appsettings": [
+                        {
+                        "name": "AzureWebJobsDashboard",
+                        "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('uniqueStorageName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts',variables('uniqueStorageName')), '2019-06-01').keys[0].value)]"
+                        },
+                        {
+                            "name": "AzureWebJobsStorage",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('uniqueStorageName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts',variables('uniqueStorageName')), '2019-06-01').keys[0].value)]"
+                        },
+                        {
+                            "name": "FUNCTIONS_EXTENSION_VERSION",
+                            "value": "~3"
+                        },
+                        {
+                            "name": "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING",
+                            "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('uniqueStorageName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts',variables('uniqueStorageName')), '2019-06-01').keys[0].value)]"
+                        },
+                        {
+                            "name": "FUNCTIONS_WORKER_RUNTIME",
+                            "value": "dotnet"
+                        },
+                        {
+                            "name": "WEBSITE_CONTENTSHARE",
+                            "value": "[variables('uniqueStorageName')]"
+                        }
+
+                    ]
+                },
+                "scmSiteAlsoStopped": false,
+                "clientAffinityEnabled": true,
+                "clientCertEnabled": false,
+                "hostNamesDisabled": false,
+                "containerSize": 1536,
+                "dailyMemoryTimeQuota": 0,
+                "httpsOnly": false,
+                "redundancyMode": "None"
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', variables('uniqueServerFarmId'))]",
+                "[resourceId('Microsoft.Storage/storageAccounts', variables('uniqueStorageName'))]"
+            ]
+        },
+        //5.2 Site Config
+        {
+            "type": "Microsoft.Web/sites/config",
+            "apiVersion": "2018-11-01",
+            "name": "[concat(variables('uniqueAzureFunctionName'), '/web')]",
+            "location": "West Europe",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', variables('uniqueAzureFunctionName'))]"
+            ],
+            "properties": {
+                "numberOfWorkers": -1,
+                "defaultDocuments": [
+                    "Default.htm",
+                    "Default.html",
+                    "Default.asp",
+                    "index.htm",
+                    "index.html",
+                    "iisstart.htm",
+                    "default.aspx",
+                    "index.php"
+                ],
+                "netFrameworkVersion": "v4.0",
+                "phpVersion": "5.6",
+                "requestTracingEnabled": false,
+                "remoteDebuggingEnabled": false,
+                "remoteDebuggingVersion": "VS2019",
+                "httpLoggingEnabled": false,
+                "logsDirectorySizeLimit": 35,
+                "detailedErrorLoggingEnabled": false,
+                "publishingUsername": "[concat('$',variables('uniqueAzureFunctionName'))]",
+                "azureStorageAccounts": {},
+                "scmType": "None",
+                "use32BitWorkerProcess": true,
+                "webSocketsEnabled": false,
+                "alwaysOn": false,
+                "managedPipelineMode": "Integrated",
+                "virtualApplications": [
+                    {
+                        "virtualPath": "/",
+                        "physicalPath": "site\\wwwroot",
+                        "preloadEnabled": false
+                    }
+                ],
+                "loadBalancing": "LeastRequests",
+                "experiments": {
+                    "rampUpRules": []
+                },
+                "autoHealEnabled": false,
+                "cors": {
+                    "allowedOrigins": [
+                        "*"
+                    ],
+                    "supportCredentials": false
+                },
+                "apiDefinition": {
+                    "url": "https://github.com/ganroman/D365FO_DIXF_ZipPackage/blob/master/D365FO_DIXF_ZipPackage/OpenAPIs/dmfcreatepackage.json"
+                    //"https://storageaccountnocde9229.blob.core.windows.net/swagger/dmfcreatepackage.json"
+                },
+                "localMySqlEnabled": false,
+                "ipSecurityRestrictions": [
+                    {
+                        "ipAddress": "Any",
+                        "action": "Allow",
+                        "priority": 1,
+                        "name": "Allow all",
+                        "description": "Allow all access"
+                    }
+                ],
+                "scmIpSecurityRestrictions": [
+                    {
+                        "ipAddress": "Any",
+                        "action": "Allow",
+                        "priority": 1,
+                        "name": "Allow all",
+                        "description": "Allow all access"
+                    }
+                ],
+                "scmIpSecurityRestrictionsUseMain": false,
+                "http20Enabled": false,
+                "minTlsVersion": "1.2",
+                "ftpsState": "AllAllowed",
+                "reservedInstanceCount": 0,
+                "properties": {
+                    "AzureWebJobsStorage": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('uniqueStorageName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts',variables('uniqueStorageName')), '2019-06-01').keys[0].value, ';EndpointSuffix=core.windows.net')]",
+                    "AzureWebJobsDashboard": "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('uniqueStorageName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts',variables('uniqueStorageName')), '2019-06-01').keys[0].value, ';EndpointSuffix=core.windows.net')]",
+                    "FUNCTIONS_EXTENSION_VERSION": "~3",
+                    "FUNCTIONS_WORKER_RUNTIME": "dotnet",
+                    "WEBSITE_CONTENTSHARE" : "[variables('uniqueStorageName')]",
+                    "WEBSITE_CONTENTAZUREFILECONNECTIONSTRING" : "[concat('DefaultEndpointsProtocol=https;AccountName=', variables('uniqueStorageName'), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts',variables('uniqueStorageName')), '2019-06-01').keys[0].value, ';EndpointSuffix=core.windows.net')]"
+                }
+            }
+        },
+        /*
+        //5.3 Sites functions
+        {
+            "type": "Microsoft.Web/sites/functions",
+            "apiVersion": "2018-11-01",
+            "name": "[concat(variables('uniqueAzureFunctionName'), '/D365FO_DIXF_ZipPackage')]",
+            "location": "[parameters('location')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', variables('uniqueAzureFunctionName'))]"
+            ],
+            "properties": {
+                "script_root_path_href": "[concat(variables('azureFunctionPublicAddress'),'/admin/vfs/site/wwwroot/D365FO_DIXF_ZipPackage/')]",
+                "script_href": "[concat(variables('azureFunctionPublicAddress'),'/admin/vfs/site/wwwroot/bin/D365FO_DIXF_ZipPackage.dll')]",
+                "config_href": "[concat(variables('azureFunctionPublicAddress'),'/admin/vfs/site/wwwroot/D365FO_DIXF_ZipPackage/function.json')]",
+                "href": "[concat(variables('azureFunctionPublicAddress'),'/admin/functions/D365FO_DIXF_ZipPackage')]",
+                "config": {}//,
+                //"test_data": "{\"method\":\"post\",\"body\":\"\",\"queryStringParams\":[{\"name\":\"pathToArchive\",\"value\":\"20200417012304\"},{\"name\":\"BLOBContainer\",\"value\":\"dmfcreatepackage\"}],\"headers\":[]}"
+            }
+        },
+        */
+        //5.4 Host name bindings
+        {
+            "type": "Microsoft.Web/sites/hostNameBindings",
+            "apiVersion": "2018-11-01",
+            "name": "[concat(variables('uniqueAzureFunctionName'), '/', variables('uniqueAzureFunctionName'), '.azurewebsites.net')]",
+            "location": "West Europe",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', variables('uniqueAzureFunctionName'))]"
+            ],
+            "properties": {
+                "siteName": "[variables('uniqueAzureFunctionName')]",
+                "hostNameType": "Verified"
+            }
         }
-        /*,
+        //6. API Management Service
+        //7. Deploy Logic App
+        /*
         {
            "type": "Microsoft.Logic/workflows",
             "apiVersion": "2017-07-01",
-            "name": "[variables('uniqueLogicAppName')]",
+            "name": "[parameters('logicAppName')]",
+            "dependsOn": [
+                "[resourceId('Microsoft.Web/connections', variables('uniqueAzureBlobConnectionName'))]",
+                "[resourceId('Microsoft.Web/connections', variables('uniqueDAXConnectionName'))]",
+                "[resourceId('Microsoft.Web/connections', variables('uniqueOneDriveConnectionName'))]"
+            ],
             "location": "[parameters('location')]",
             "properties": {
                 "state": "Disabled",
@@ -191,8 +462,51 @@
                     "parameters": {
                         "$connections": {
                             "defaultValue": {},
-                            "type": "Object"#
+                            "type": "Object"
+                        },
+                        "dynamicsax_instance": {
+                            "defaultValue": "[parameters('paramdynamicsax_instance')]",
+                            "type": "String"
+                        },
+
+                        "integrationPort" : {
+                            "defaultValue": "[parameters('onedriveforbusiness_folder')]",
+                            "type": "String"
+                        },
+
+                        "AzureBlobContainerId": {
+                            "defaultValue": "[parameters('AzureBlobContainerId')]",
+                            "type": "String"
+                        },
+                        "CompanyId": {
+                            "defaultValue": "DEMF",
+                            "type": "String"
+                        },
+                        "DefaultFileExtension": {
+                            "defaultValue": ".csv",
+                            "type": "String"
+                        },
+                        "DefaultPriceJournalName": {
+                            "defaultValue": "VK-Preise",
+                            "type": "String"
+                        },
+                        "FileContentType": {
+                            "defaultValue": "text/csv",
+                            "type": "String"
+                        },
+                        "PriceJournalIdPlaceholder": {
+                            "defaultValue": "PRICEEVENT",
+                            "type": "String"
+                        },
+                        "AzureAPIPublicAddress" : {
+                            "defaultValue": "[variables('azureAPIPublicAddress')]",
+                            "type": "string"
+                        },
+                        "AzureFunctionName" : {
+                            "defaultValue": "[variables('uniqueAzureFunctionName')]",
+                            "type": "string"
                         }
+
                     },
 
                     "triggers": {
@@ -219,6 +533,798 @@
                                     "inferContentType": true,
                                     "simulate": false
                                 }
+                            }
+                        }
+                    },
+                    "actions": {
+                        "Archive_folder": {
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "ArchiveFolder",
+                                        "type": "string",
+                                        "value": "@{formatDateTime(utcNow(),'yyyyMMddhhmmss')}"
+                                    }
+                                ]
+                            },
+                            "runAfter": {
+                                "CSV_file_content": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable"
+                        },
+                        "Azure_storage_folder": {
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "AzureStorageFolder",
+                                        "type": "string",
+                                        "value": "@{concat('/',parameters('AzureBlobContainerId'),'/',variables('ArchiveFolder'))}"
+                                    }
+                                ]
+                            },
+                            "runAfter": {
+                                "Archive_folder": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable"
+                        },
+                        "CSV_file_content": {
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "CSVFileContent",
+                                        "type": "string"
+                                    }
+                                ]
+                            },
+                            "runAfter": {
+                                "Manifest_file_content_end": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable"
+                        },
+                        "Condition": {
+                            "actions": {
+                                "Copy_files_to_Azure_BLOB_Storage": {
+                                    "actions": {
+                                        "Try_write_CSV_file_to_Azure_BLOB_Storage": {
+                                            "actions": {
+                                                "Write_CSV_file_to_a_blob_storage": {
+                                                    "inputs": {
+                                                        "body": "@variables('CSVFileContent')",
+                                                        "host": {
+                                                            "connection": {
+                                                                "name": "@parameters('$connections')['azureblob']['connectionId']"
+                                                            }
+                                                        },
+                                                        "method": "post",
+                                                        "path": "/datasets/default/files",
+                                                        "queries": {
+                                                            "folderPath": "@variables('AzureStorageFolder')",
+                                                            "name": "@base64ToString(triggerOutputs()['headers']['x-ms-file-name-encoded'])",
+                                                            "queryParametersSingleEncoded": true
+                                                        }
+                                                    },
+                                                    "runAfter": {},
+                                                    "runtimeConfiguration": {
+                                                        "contentTransfer": {
+                                                            "transferMode": "Chunked"
+                                                        }
+                                                    },
+                                                    "type": "ApiConnection"
+                                                }
+                                            },
+                                            "expression": "@equals(actions('Write_CSV_file_to_a_blob_storage').Status, 'Succeeded')",
+                                            "limit": {
+                                                "count": 10,
+                                                "timeout": "PT1H"
+                                            },
+                                            "runAfter": {},
+                                            "type": "Until"
+                                        },
+                                        "Try_write_Manifest_file_to_Azure_BLOB_Storage": {
+                                            "actions": {
+                                                "Write_manifest_file_to_a_blob_storage": {
+                                                    "inputs": {
+                                                        "body": "@variables('ManifestFileConetent')",
+                                                        "host": {
+                                                            "connection": {
+                                                                "name": "@parameters('$connections')['azureblob']['connectionId']"
+                                                            }
+                                                        },
+                                                        "method": "post",
+                                                        "path": "/datasets/default/files",
+                                                        "queries": {
+                                                            "folderPath": "@variables('AzureStorageFolder')",
+                                                            "name": "Manifest.xml",
+                                                            "queryParametersSingleEncoded": true
+                                                        }
+                                                    },
+                                                    "runAfter": {},
+                                                    "runtimeConfiguration": {
+                                                        "contentTransfer": {
+                                                            "transferMode": "Chunked"
+                                                        }
+                                                    },
+                                                    "type": "ApiConnection"
+                                                }
+                                            },
+                                            "expression": "@equals(actions('Write_manifest_file_to_a_blob_storage').Status, 'Succeeded')",
+                                            "limit": {
+                                                "count": 10,
+                                                "timeout": "PT1H"
+                                            },
+                                            "runAfter": {
+                                                "Try_write_CSV_file_to_Azure_BLOB_Storage": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Until"
+                                        },
+                                        "Try_write_Package_Header_to_Azure_BLOB_Storage": {
+                                            "actions": {
+                                                "Write_package_header_to_a_blob_storage": {
+                                                    "inputs": {
+                                                        "body": "@body('Get_Package_Header_file_content')",
+                                                        "host": {
+                                                            "connection": {
+                                                                "name": "@parameters('$connections')['azureblob']['connectionId']"
+                                                            }
+                                                        },
+                                                        "method": "post",
+                                                        "path": "/datasets/default/files",
+                                                        "queries": {
+                                                            "folderPath": "@variables('AzureStorageFolder')",
+                                                            "name": "PackageHeader.xml",
+                                                            "queryParametersSingleEncoded": true
+                                                        }
+                                                    },
+                                                    "runAfter": {},
+                                                    "runtimeConfiguration": {
+                                                        "contentTransfer": {
+                                                            "transferMode": "Chunked"
+                                                        }
+                                                    },
+                                                    "type": "ApiConnection"
+                                                }
+                                            },
+                                            "expression": "@equals(actions('Write_package_header_to_a_blob_storage').Status, 'Succeeded')",
+                                            "limit": {
+                                                "count": 10,
+                                                "timeout": "PT1H"
+                                            },
+                                            "runAfter": {
+                                                "Try_write_Manifest_file_to_Azure_BLOB_Storage": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Until"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Move_CSV_to_Processing": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Scope"
+                                },
+                                "Create_new_trade_agreement_journal_and_set_journal_Id_in_CSV": {
+                                    "actions": {
+                                        "Check_file_name_schema": {
+                                            "actions": {
+                                                "Get_price_journal_name": {
+                                                    "inputs": {
+                                                        "name": "PriceJournalName",
+                                                        "value": "@{substring(variables('DecodedFileName'),0,indexOf(variables('DecodedFileName'),'#'))}"
+                                                    },
+                                                    "runAfter": {},
+                                                    "type": "SetVariable"
+                                                }
+                                            },
+                                            "else": {
+                                                "actions": {
+                                                    "Set_default_price_journal_name": {
+                                                        "inputs": {
+                                                            "name": "PriceJournalName",
+                                                            "value": "@parameters('DefaultPriceJournalName')"
+                                                        },
+                                                        "runAfter": {},
+                                                        "type": "SetVariable"
+                                                    }
+                                                }
+                                            },
+                                            "expression": {
+                                                "and": [
+                                                    {
+                                                        "greater": [
+                                                            "@indexOf(variables('DecodedFileName'),'#')",
+                                                            0
+                                                        ]
+                                                    }
+                                                ]
+                                            },
+                                            "runAfter": {},
+                                            "type": "If"
+                                        },
+                                        "Create_price_journal": {
+                                            "inputs": {
+                                                "body": {
+                                                    "JournalDescription": "@variables('DecodedFileName')",
+                                                    "TradeAgreementJournalNameId": "@variables('PriceJournalName')",
+                                                    "dataAreaId": "@parameters('CompanyId')"
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['dynamicsax_1']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "@concat('/datasets/', encodeURIComponent(encodeURIComponent(parameters('dynamicsax_instance'))), '/tables/', encodeURIComponent(encodeURIComponent('TradeAgreementJournalHeaders/items')))"
+                                            },
+                                            "runAfter": {
+                                                "Check_file_name_schema": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection"
+                                        },
+                                        "Replace_price_journal_id_in_file_content": {
+                                            "inputs": {
+                                                "name": "CSVFileContent",
+                                                "value": "@{replace(triggerBody(),parameters('PriceJournalIdPlaceholder'),body('Create_price_journal')?['JournalNumber'])}"
+                                            },
+                                            "runAfter": {
+                                                "Create_price_journal": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "SetVariable"
+                                        }
+                                    },
+                                    "runAfter": {},
+                                    "type": "Scope"
+                                },
+                                //Azure Function -->
+                                "Create_package_ZIP": {
+                                    "actions": {
+                                        "Create_package_ZIP_file_(HTTP_POST)": {
+                                            "inputs": {
+                                                "functionApp": {
+                                                    "id": "[concat('subscriptions/', subscription().subscriptionId, '/resourceGroups/', resourceGroup().name,'/providers/Microsoft.Web/sites/', variables('uniqueAzureFunctionName'))]"
+                                                    //"id": "/subscriptions/9d8d6890-b4b0-43d0-877f-293d564c02ee/resourceGroups/noc-de-uat/providers/Microsoft.Web/sites/DMFCreatePackage"
+                                                },
+                                                "method": "post",
+                                                "uri" : "@concat(encodeURIComponent(encodeURIComponent(variables('AzureAPIPublicAddress'))), '/', encodeURIComponent(encodeURIComponent(variables('AzureFunctionName'))), '/D365FO_DIXF_ZipPackage/',encodeURIComponent(parameters('AzureBlobContainerId'))'/'encodeURIComponent(variables('ArchiveFolder')))"
+                                                //"uri": "[concat(variables('azureAPIPublicAddress'), '/D365FO_DIXF_ZipPackage/', parameters('AzureBlobContainerId'),'/',variables('ArchiveFolder'))]"
+                                                //"https://dmfcreatepackage.azure-api.net/DMFCreatePackage/D365FO_DIXF_ZipPackage/@{encodeURIComponent(parameters('AzureBlobContainerId'))}/@{encodeURIComponent(variables('ArchiveFolder'))}"
+                                            },
+                                            "runAfter": {},
+                                            "type": "Function"
+                                        },
+                                        "Get_package_ZIP_content": {
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['azureblob']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "get",
+                                                "path": "/datasets/default/files/@{encodeURIComponent(encodeURIComponent(concat(parameters('AzureBlobContainerId'),'/',body('Create_package_ZIP_file_(HTTP_POST)'))))}/content",
+                                                "queries": {
+                                                    "inferContentType": false
+                                                }
+                                            },
+                                            "runAfter": {
+                                                "Create_package_ZIP_file_(HTTP_POST)": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Copy_files_to_Azure_BLOB_Storage": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Scope"
+                                },
+                                //Azure Function <--
+                                "Import_package_ZIP_to_D365FO": {
+                                    "actions": {
+                                        "Create_DIXF_import_data_project": {
+                                            "inputs": {
+                                                "body": {
+                                                    "Description": "@variables('DecodedFileName')",
+                                                    "Name": "@{concat(body('Create_price_journal')?['JournalNumber'],'_',variables('ArchiveFolder'))}",
+                                                    "OperationType": "Import",
+                                                    "ProjectCategory": "Integration"
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['dynamicsax_1']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "@concat('/datasets/',encodeURIComponent(encodeURIComponent(parameters('dynamicsax_instance'))),'/tables/', encodeURIComponent(encodeURIComponent('DataManagementDefinitionGroups/items')))"
+                                            },
+                                            "runAfter": {},
+                                            "type": "ApiConnection"
+                                        },
+                                        "Get_write_URL": {
+                                            "inputs": {
+                                                "body": {
+                                                    "uniqueFileName": "@{guid()}"
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['dynamicsax_1']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "@concat('/datasets/',encodeURIComponent(encodeURIComponent(parameters('dynamicsax_instance'))), '/procedures/', encodeURIComponent(encodeURIComponent('DataManagementDefinitionGroups/Microsoft.Dynamics.DataEntities.GetAzureWriteUrl')))"
+                                            },
+                                            "runAfter": {
+                                                "Create_DIXF_import_data_project": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection"
+                                        },
+                                        "Import_package": {
+                                            "inputs": {
+                                                "body": {
+                                                    "definitionGroupId": "@{concat(body('Create_price_journal')?['JournalNumber'],'_',variables('ArchiveFolder'))}",
+                                                    "execute": true,
+                                                    "legalEntityId": "@parameters('CompanyId')",
+                                                    "overwrite": true,
+                                                    "packageUrl": "@{json(body('Get_write_URL')?['value']).BLOBUrl}"
+                                                },
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['dynamicsax_1']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "post",
+                                                "path": "@concat('/datasets/',encodeURIComponent(encodeURIComponent(parameters('dynamicsax_instance'))),'/procedures/',encodeURIComponent(encodeURIComponent('DataManagementDefinitionGroups/Microsoft.Dynamics.DataEntities.ImportFromPackage')))"
+                                            },
+                                            "runAfter": {
+                                                "Put_package_ZIP_to_D365FO_Azure_BLOB_Storage_URL": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection"
+                                        },
+                                        "Put_package_ZIP_to_D365FO_Azure_BLOB_Storage_URL": {
+                                            "inputs": {
+                                                "body": "@body('Get_package_ZIP_content')",
+                                                "headers": {
+                                                    "Content-Type": "Content-Type",
+                                                    "x-ms-blob-type": "BlockBlob",
+                                                    "x-ms-version": "2015-02-21",
+                                                    "�x-ms-date": "utcnow('R')"
+                                                },
+                                                "method": "PUT",
+                                                "uri": "@{json(body('Get_write_URL')?['value']).BLOBUrl}"
+                                            },
+                                            "runAfter": {
+                                                "Get_write_URL": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "Http"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Create_package_ZIP": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Scope"
+                                },
+                                "Move_CSV_file_either_to_Processed_or_Error": {
+                                    "cases": {
+                                        "Move_file_to_Processed_on_Success": {
+                                            "actions": {
+                                                "Create_file_in_Processed": {
+                                                    "inputs": {
+                                                        "body": "@variables('CSVFileContent')",
+                                                        "host": {
+                                                            "connection": {
+                                                                "name": "@parameters('$connections')['onedriveforbusiness']['connectionId']"
+                                                            }
+                                                        },
+                                                        "method": "post",
+                                                        
+                                                        //"path": "/datasets/default/files",
+                                                        //"queries": {
+                                                        //    "folderPath": "@{concat(@parameters($'IntegrationPort'),'PROCESSED')}",//"/Projects/00 - In progress/978 - Staples/PIM_RTL/Preise/PRICE_INPUT/PROCESSED",
+                                                        //    "name": "@base64ToString(triggerOutputs()['headers']['x-ms-file-name-encoded'])"
+                                                        //}
+                                                        
+                                                        "path": "/datasets/default/copyFile",
+                                                        "queries": {
+                                                            "destination": "@{triggerOutputs()['headers']['x-ms-file-path']}/PROCESSED/@{triggerOutputs()['headers']['x-ms-file-name']}",
+                                                            "overwrite": true,
+                                                            "source": "@{triggerOutputs()['headers']['x-ms-file-path']}"
+                                                        }
+                                                    },
+                                                    "runAfter": {},
+                                                    "runtimeConfiguration": {
+                                                        "contentTransfer": {
+                                                            "transferMode": "Chunked"
+                                                        }
+                                                    },
+                                                    "type": "ApiConnection"
+                                                }
+                                            },
+                                            "case": "Succeeded"
+                                        }
+                                    },
+                                    "default": {
+                                        "actions": {
+                                            "Create_file_in_Error": {
+                                                "inputs": {
+                                                    "body": "@variables('CSVFileContent')",
+                                                    "host": {
+                                                        "connection": {
+                                                            "name": "@parameters('$connections')['onedriveforbusiness']['connectionId']"
+                                                        }
+                                                    },
+                                                    "method": "post",
+                                                    
+                                                    //"path": "/datasets/default/files",
+                                                    //"queries": {
+                                                    //    "folderPath": "@{concat(@parameters($'IntegrationPort'),'ERROR')}",//"/Projects/00 - In progress/978 - Staples/PIM_RTL/Preise/PRICE_INPUT/ERROR",
+                                                    //    "name": "@base64ToString(triggerOutputs()['headers']['x-ms-file-name-encoded'])"
+                                                    //}
+                                                    
+                                                    "path": "/datasets/default/copyFile",
+                                                    "queries": {
+                                                        "destination": "@{triggerOutputs()['headers']['x-ms-file-path']}/ERROR/@{triggerOutputs()['headers']['x-ms-file-name']}",
+                                                        "overwrite": true,
+                                                        "source": "@{triggerOutputs()['headers']['x-ms-file-path']}"
+                                                    }
+                                                },
+                                                "runAfter": {},
+                                                "runtimeConfiguration": {
+                                                    "contentTransfer": {
+                                                        "transferMode": "Chunked"
+                                                    }
+                                                },
+                                                "type": "ApiConnection"
+                                            }
+                                        }
+                                    },
+                                    "expression": "@actions('Import_package').Status",
+                                    "runAfter": {
+                                        "Import_package_ZIP_to_D365FO": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Switch"
+                                },
+                                "Move_CSV_to_Processing": {
+                                    "actions": {
+                                        "Copy_file_to_\"Processing\"": {
+                                            "inputs": {
+                                                "body": "@variables('CSVFileContent')",
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['onedriveforbusiness']['connectionId']"
+                                                    },
+                                                    "api": {
+                                                        "runtimeUrl": "https://logic-apis-westus2.azure-apim.net/apim/onedriveforbusiness"
+                                                    }
+                                                },
+                                                
+                                                "method": "post",
+                                                /*
+                                                //"path": "/datasets/default/files",
+                                                //"queries": {
+                                                //    "folderPath": "@{concat(@parameters($'IntegrationPort'),'PROCESSING')}",//"/Projects/00 - In progress/978 - Staples/PIM_RTL/Preise/PRICE_INPUT/PROCESSING",
+                                                //    "name": "@base64ToString(triggerOutputs()['headers']['x-ms-file-name-encoded'])"
+                                                
+                                                "path": "/datasets/default/copyFile",
+                                                "queries": {
+                                                    "destination": "@{triggerOutputs()['headers']['x-ms-file-path']}/PROCESSING/@{triggerOutputs()['headers']['x-ms-file-name']}",
+                                                    "overwrite": true,
+                                                    "source": "@{triggerOutputs()['headers']['x-ms-file-path']}"
+                                                }
+                                            },
+                                            "runAfter": {},
+                                            "runtimeConfiguration": {
+                                                "contentTransfer": {
+                                                    "transferMode": "Chunked"
+                                                }
+                                            },
+                                            "type": "ApiConnection"
+                                        },
+                                        "Delete_file_from_\"Input\"": {
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['onedriveforbusiness']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "delete",
+                                                "path": "/datasets/default/files/@{encodeURIComponent(encodeURIComponent(triggerOutputs()['headers']['x-ms-file-id']))}"
+                                            },
+                                            "runAfter": {
+                                                "Copy_file_to_\"Processing\"": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Retrieve_PackageHeader_and_Manifest,_Modify_Manifest_file_content": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Scope"
+                                },
+                                "Remove_file_from_Processing": {
+                                    "inputs": {
+                                        "host": {
+                                            "connection": {
+                                                "name": "@parameters('$connections')['onedriveforbusiness']['connectionId']"
+                                            }
+                                        },
+                                        "method": "delete",
+                                        "path": "/datasets/default/files/@{encodeURIComponent(encodeURIComponent(body('Copy_file_to_\"Processing\"')?['Id']))}"
+                                    },
+                                    "runAfter": {
+                                        "Move_CSV_file_either_to_Processed_or_Error": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "ApiConnection"
+                                },
+                                "Retrieve_PackageHeader_and_Manifest,_Modify_Manifest_file_content": {
+                                    "actions": {
+                                        "Change_Input_file_name_in_manifest_file": {
+                                            "inputs": {
+                                                "name": "ManifestFileConetent",
+                                                "value": "@{concat(variables('ManifestContentBegin'),variables('DecodedFileName'),variables('ManifestContentEnd'))}"
+                                            },
+                                            "runAfter": {
+                                                "Set_manifest_content_end": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "SetVariable"
+                                        },
+                                        "Get_Manifest_file_content": {
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['onedriveforbusiness']['connectionId']"
+                                                    }
+                                                },
+                                                
+                                                "method": "get",
+                                                
+                                                //"path": "/datasets/default/files/@{encodeURIComponent(encodeURIComponent('b!VA67345UL02OyI5wGvY1xJbe8XKndHdOuih5MtZy11yynz4OuelaRr2xWV6g7eDi.01NKZMXP27QSV6Y34MGZCL7WBJK2ASLAVA'))}/content",
+                                                "path": "/datasets/default/files/@{triggerOutputs()['headers']['x-ms-file-path']}/MANIFEST/Manifest.xml/content",
+                                                "queries": {
+                                                    "inferContentType": true
+                                                }
+                                            },
+                                            "metadata": {
+                                                "b!VA67345UL02OyI5wGvY1xJbe8XKndHdOuih5MtZy11yynz4OuelaRr2xWV6g7eDi.01NKZMXP27QSV6Y34MGZCL7WBJK2ASLAVA": "/Projects/00 - In progress/978 - Staples/PIM_RTL/Preise/PRICE_INPUT/MANIFEST/Manifest.xml",
+                                                "b!VA67345UL02OyI5wGvY1xJbe8XKndHdOuih5MtZy11yynz4OuelaRr2xWV6g7eDi.01NKZMXP5E3PZFTNSENVCK4FVNM7QWLDKX": "/Projects/00 - In progress/978 - Staples/PIM_RTL/Preise/PRICE_INPUT/MANIFEST/Manifest.xml"
+                                            },
+                                            "runAfter": {},
+                                            "type": "ApiConnection"
+                                        },
+                                        "Get_Package_Header_file_content": {
+                                            "inputs": {
+                                                "host": {
+                                                    "connection": {
+                                                        "name": "@parameters('$connections')['onedriveforbusiness']['connectionId']"
+                                                    }
+                                                },
+                                                "method": "get",
+                                                //"path": "/datasets/default/files/@{encodeURIComponent(encodeURIComponent('b!VA67345UL02OyI5wGvY1xJbe8XKndHdOuih5MtZy11yynz4OuelaRr2xWV6g7eDi.01NKZMXP76ZLJLH22G2BFYONZK4NBXRDOD'))}/content",
+                                                "path": "/datasets/default/files/@{triggerOutputs()['headers']['x-ms-file-path']}/MANIFEST/PackageHeader.xml/content",
+                                                "queries": {
+                                                    "inferContentType": true
+                                                }
+                                            },
+                                            "metadata": {
+                                                "b!VA67345UL02OyI5wGvY1xJbe8XKndHdOuih5MtZy11yynz4OuelaRr2xWV6g7eDi.01NKZMXP76ZLJLH22G2BFYONZK4NBXRDOD": "/Projects/00 - In progress/978 - Staples/PIM_RTL/Preise/PRICE_INPUT/MANIFEST/PackageHeader.xml"
+                                            },
+                                            "runAfter": {
+                                                "Change_Input_file_name_in_manifest_file": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "ApiConnection"
+                                        },
+                                        "Save_manifest_file_content": {
+                                            "inputs": {
+                                                "name": "ManifestFileConetent",
+                                                "value": "@{body('Get_Manifest_file_content')}"
+                                            },
+                                            "runAfter": {
+                                                "Get_Manifest_file_content": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "SetVariable"
+                                        },
+                                        "Set_manifest_content_begin": {
+                                            "inputs": {
+                                                "name": "ManifestContentBegin",
+                                                "value": "@{substring(variables('ManifestFileConetent'), 0, add(indexOf(variables('ManifestFileConetent'),'<InputFilePath>'),length('<InputFilePath>')))}"
+                                            },
+                                            "runAfter": {
+                                                "Save_manifest_file_content": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "SetVariable"
+                                        },
+                                        "Set_manifest_content_end": {
+                                            "inputs": {
+                                                "name": "ManifestContentEnd",
+                                                "value": "@{substring(variables('ManifestFileConetent'), indexOf(variables('ManifestFileConetent'),'</InputFilePath>'), sub(length(variables('ManifestFileConetent')),indexOf(variables('ManifestFileConetent'),'</InputFilePath>')))}"
+                                            },
+                                            "runAfter": {
+                                                "Set_manifest_content_begin": [
+                                                    "Succeeded"
+                                                ]
+                                            },
+                                            "type": "SetVariable"
+                                        }
+                                    },
+                                    "runAfter": {
+                                        "Create_new_trade_agreement_journal_and_set_journal_Id_in_CSV": [
+                                            "Succeeded"
+                                        ]
+                                    },
+                                    "type": "Scope"
+                                }
+                            },
+                            "expression": {
+                                "and": [
+                                    {
+                                        "contains": [
+                                            "@triggerOutputs()['headers']['Content-Type']",
+                                            "@parameters('FileContentType')"
+                                        ]
+                                    }
+                                ]
+                            },
+                            "runAfter": {
+                                "Price_journal_name": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "If"
+                        },
+                        "DecodedFileName": {
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "DecodedFileName",
+                                        "type": "string",
+                                        "value": "@{base64ToString(triggerOutputs()['headers']['x-ms-file-name-encoded'])}"
+                                    }
+                                ]
+                            },
+                            "runAfter": {},
+                            "type": "InitializeVariable"
+                        },
+                        "Manifest_file_content": {
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "ManifestFileConetent",
+                                        "type": "string"
+                                    }
+                                ]
+                            },
+                            "runAfter": {
+                                "DecodedFileName": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable"
+                        },
+                        "Manifest_file_content_begin": {
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "ManifestContentBegin",
+                                        "type": "string"
+                                    }
+                                ]
+                            },
+                            "runAfter": {
+                                "Package_header_file_content": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable"
+                        },
+                        "Manifest_file_content_end": {
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "ManifestContentEnd",
+                                        "type": "string"
+                                    }
+                                ]
+                            },
+                            "runAfter": {
+                                "Manifest_file_content_begin": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable"
+                        },
+                        "Package_header_file_content": {
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "PackageHeaderFileContent",
+                                        "type": "string"
+                                    }
+                                ]
+                            },
+                            "runAfter": {
+                                "Manifest_file_content": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable"
+                        },
+                        "Price_journal_name": {
+                            "inputs": {
+                                "variables": [
+                                    {
+                                        "name": "PriceJournalName",
+                                        "type": "string",
+                                        "value": "@variables('DecodedFileName')"
+                                    }
+                                ]
+                            },
+                            "runAfter": {
+                                "Azure_storage_folder": [
+                                    "Succeeded"
+                                ]
+                            },
+                            "type": "InitializeVariable"
+                        }
+                    },
+                    "outputs": {}
+                },
+                "parameters": {
+                    "$connections": {
+                        "value": {
+                            "dynamicsax_1": {
+                                "id": "[concat(subscription().id,'/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/',parameters('connections_dynamicsax_api'))]",
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('uniqueDAXConnectionName'))]"
+                            },
+                            "azureblob": {
+                                "id": "[concat(subscription().id,'/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/',parameters('connections_azureblob_api'))]",
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('uniqueAzureBlobConnectionName'))]"
+                            },
+                            
+                            //"office365_1": {
+                            //    "id": "[concat(subscription().id,'/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/office365')]",
+                            //    "connectionId": "[resourceId('Microsoft.Web/connections', parameters('office365_1'))]"
+                            //},
+                            "onedriveforbusiness": {
+                                "id": "[concat(subscription().id,'/providers/Microsoft.Web/locations/', parameters('location'), '/managedApis/', parameters('connections_onedriveforbusiness_api'))]",
+                                "connectionId": "[resourceId('Microsoft.Web/connections', variables('uniqueOneDriveConnectionName'))]"
                             }
                         }
                     }
