@@ -76,7 +76,7 @@
             "defaultValue": ".csv",
             "type": "String",
             "metadata": {
-                "description": "Default extension of files to process"
+                "description": "File. Default extension of files to process"
             }
         },
         
@@ -84,7 +84,7 @@
             "defaultValue": "text/csv",
             "type": "String",
             "metadata": {
-                "description": "Default files content type"
+                "description": "File. Default files content type"
             }
         },
 
@@ -92,7 +92,7 @@
             "defaultValue": "PRICEEVENT",
             "type": "String",
             "metadata": {
-                "description": "Placeholder in the price list be replaced by the real price jounral id"
+                "description": "File. Placeholder in the price list be replaced by the real price jounral id"
             }
         },
 
