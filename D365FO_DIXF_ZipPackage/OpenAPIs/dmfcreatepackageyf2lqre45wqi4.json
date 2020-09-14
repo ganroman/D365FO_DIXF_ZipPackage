@@ -1,0 +1,90 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "DMFCreatePackageyf2lqre45wqi4",
+    "version": "1.0",
+    "description": "Import from \"DMFCreatePackageyf2lqre45wqi4\" Function App"
+  },
+  "host": "dmfcreatepackageyf2lqre45wqi4-apim.azure-api.net",
+  "basePath": "/DMFCreatePackageyf2lqre45wqi4",
+  "schemes": [
+    "https"
+  ],
+  "securityDefinitions": {
+    "apiKeyHeader": {
+      "type": "apiKey",
+      "name": "Ocp-Apim-Subscription-Key",
+      "in": "header"
+    },
+    "apiKeyQuery": {
+      "type": "apiKey",
+      "name": "subscription-key",
+      "in": "query"
+    }
+  },
+  "security": [
+    {
+      "apiKeyHeader": []
+    },
+    {
+      "apiKeyQuery": []
+    }
+  ],
+  "paths": {
+    "/D365FO_DIXF_ZipPackage/{BLOBContainer}/{pathToArchive}": {
+      "get": {
+        "description": "This function compresses files inside a folder <pathToArchive> to a ZIP-archive <pathToArchive.zip> and places it  into the folder <pathToArchive>. The value returned  is the the Uri of the ZIP-archive",
+        "operationId": "get-d365fo-dixf-zippackage",
+        "summary": "D365FO_DIXF_ZipPackage",
+        "parameters": [
+          {
+            "name": "BLOBContainer",
+            "in": "path",
+            "description": "Name of BLOB container in the specified Azure Storage Account",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "pathToArchive",
+            "in": "path",
+            "description": "Name of folder to be archived inside the BLOB container",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The value returned  is the Uri of the ZIP-archive"
+          }
+        }
+      },
+      "post": {
+        "description": "This function compresses files inside a folder <pathToArchive> to a ZIP-archive <pathToArchive.zip> and places it  into the folder <pathToArchive>. The value returned  is the the Uri of the ZIP-archive",
+        "operationId": "post-d365fo-dixf-zippackage",
+        "summary": "D365FO_DIXF_ZipPackage",
+        "parameters": [
+          {
+            "name": "BLOBContainer",
+            "in": "path",
+            "description": "Name of BLOB container in the specified Azure Storage Account",
+            "required": true,
+            "type": "string"
+          },
+          {
+            "name": "pathToArchive",
+            "in": "path",
+            "description": "Name of folder to be archived inside the BLOB container",
+            "required": true,
+            "type": "string"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The value returned  is the Uri of the ZIP-archive"
+          }
+        }
+      }
+    }
+  },
+  "tags": []
+}
