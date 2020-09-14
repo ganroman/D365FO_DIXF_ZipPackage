@@ -38,13 +38,6 @@
             },
         */
         //1. Parameters of azure storage
-        "storagePrefix": {
-            "type": "string",
-            "defaultvalue": "dixfstorage",
-            "minLength": 3,
-            "maxLength": 24
-        },
-        
         "storageSku": {
                 "type": "string",
                 "defaultValue": "Standard_LRS",
@@ -163,7 +156,7 @@
     
     "variables": {
         "uniquedeploymenthash": "[uniqueString(resourceGroup().id)]",
-        "uniqueStorageName": "[concat(parameters('storagePrefix'), variables('uniquedeploymenthash'))]",
+        "uniqueStorageName": "[concat('dixfstorage', variables('uniquedeploymenthash'))]",
         "uniqueDAXConnectionName": "[concat('dynamicsax', variables('uniquedeploymenthash'))]",
         "uniqueAzureBlobConnectionName": "[concat('azureblob', variables('uniquedeploymenthash'))]",
         "uniqueOneDriveConnectionName": "[concat('onedriveforbusiness', variables('uniquedeploymenthash'))]",
