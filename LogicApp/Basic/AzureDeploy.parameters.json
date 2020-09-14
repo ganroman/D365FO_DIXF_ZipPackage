@@ -5,42 +5,57 @@
         
         
         "D365FOCompanyId": {
-            "value": "DEMF"
+            "value": "DEMF",
+            "metadata": {
+              "description": "Company in D365FO"
+            }
         },
         "D365FODefaultPriceJournalName": {
-            "value": "VK-Preise"
+            "value": "VK-Preise",
+            "metadata": {
+              "description": "Price journal name to be used"
+            }
         },
-        
+        "PriceJournalIdPlaceholder": {
+          "value": "PRICEEVENT",
+          "metadata": {
+            "description": "Placeholder in the price list be replaced by the real price jounral id"
+          }
+        },
         "OneDriveFolder": {
             "value": "/Projects/00 - In progress/978 - Staples/PIM_RTL/Preise/PRICE_INPUT"
         },
-        "PriceJournalIdPlaceholder": {
-            "value": "PRICEEVENT"
-        },
+        
 
         "logicAppName": {
             "value": "SalesPriceImport_logic_app"
-          },
-          "paramdynamicsax_instance": {
-            "value": "https://noc-de-uat.sandbox.operations.dynamics.com"
-          },
-          "onedriveforbusiness_folder": {
-                "value": "myfolder"
-          },
-          "paramexception_email_id": {
-            "value": "roman.ganopolskyi@prodwaredemode01.onmicrosoft.com"
-          },
-          "dynamicsax_1": {
-            "value": "https://retaildevelop0121bce8906a1f18f9devaos.cloudax.dynamics.com"
-          },
-          "dynamicsax_1_account": {
-            "value": "roman.ganopolskyi@prodwaredemode01.onmicrosoft.com"
-          },
-          "onedriveforbusiness_account": {
-            "value": "r.ganopolskyi@prodware.at"
-          },
-          "office365_1_account": {
-            "value": "r.ganopolskyi@prodware.at"
+        },
+        "paramdynamicsax_instance": {
+          "value": "https://mydynamics.operations.dynamics.com",
+          "metadata": {
+            "description": "URL to Dynamics 365 for Finance and SCM"
           }
+        },
+        "onedriveforbusiness_folder": {
+              "value": "myfolder",
+              "metadata": {
+                "description": "Integration port (folder on OneDrive)"
+              }
+        },
+        "paramexception_email_id": {
+          "value": "roman.ganopolskyi@prodwaredemode01.onmicrosoft.com"
+        },
+        "dynamicsax_1": {
+          "value": "https://retaildevelop0121bce8906a1f18f9devaos.cloudax.dynamics.com"
+        },
+        "dynamicsax_1_account": {
+          "value": "roman.ganopolskyi@prodwaredemode01.onmicrosoft.com"
+        },
+        "onedriveforbusiness_account": {
+          "value": "r.ganopolskyi@prodware.at"
+        },
+        "office365_1_account": {
+          "value": "r.ganopolskyi@prodware.at"
+        }
     }
 }

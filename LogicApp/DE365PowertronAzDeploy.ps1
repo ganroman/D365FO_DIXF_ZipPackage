@@ -1,5 +1,6 @@
 $AzureResourceGroupName = "PDE-RGA-FO-Powertron"
-$AzureDeployTemplateFile = "basic\de365powertronrscdeploy.json"
+$AzureDeployTemplateFile = "basic\azuredeploy.json"
+$AzureDeployTemplateParameterFile = "basic\azuredeploy.parametres.json"
 #$storagePrefix = "dixf"
 #$OneDriveFolder = "/Projects/00 - In progress/978 - Staples/PIM_RTL/Preise/PRICE_INPUT"
 
@@ -13,6 +14,7 @@ New-AzResourceGroupDeployment `
   -Name de365powertron_dixfpackagecreate `
   -ResourceGroupName $AzureResourceGroupName `
   -TemplateFile $AzureDeployTemplateFile `
+  -TemplateParameterFile $parameterFile
   
 #New-AzResourceGroupDeployment `
 #  -Name de365powertron_dixfpackagecreate_serviceAPI `
